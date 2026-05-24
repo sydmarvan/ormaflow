@@ -37,8 +37,17 @@ class GeminiService {
   }) async {
     try {
       const prompt =
-          'Transcribe this audio clip into a clean, concise personal task or note. '
-          'Fix grammar gaps.';
+          'Listen carefully to this audio and extract EVERY task, reminder, or action item mentioned — '
+          'do not skip or merge any item. '
+          'Output a prioritized to-do list using this exact format for each item:\n'
+          '[ ] <emoji> <task title> — <deadline or timing if mentioned>\n\n'
+          'Priority rules:\n'
+          '• 🔴 High — has a hard deadline (today, tonight, specific date) or is urgent\n'
+          '• 🟡 Medium — should be done soon but no hard date\n'
+          '• 🟢 Low — nice-to-do, no urgency\n\n'
+          'Sort: High items first, then Medium, then Low. '
+          'If no deadline is mentioned for an item, still include it with the correct priority emoji. '
+          'Fix grammar but preserve all meaning. Output only the list — no intro sentence, no explanations.';
 
       final audioPart = DataPart(mimeType, Uint8List.fromList(audioBytes));
       final content = Content.multi([TextPart(prompt), audioPart]);
@@ -72,8 +81,13 @@ class GeminiService {
   }) async {
     try {
       const prompt =
-          'Extract all tasks, data, and text from this screenshot. '
-          'Format it cleanly as a standard personal note.';
+          'Extract ALL text, tasks, data, and information visible in this image — do not skip anything. '
+          'Structure the output as a clean personal note:\n\n'
+          '• If there are action items or tasks, list them as:\n'
+          '  [ ] <task> — <any date or context visible>\n'
+          '• If there is general text or data (names, numbers, addresses, etc.), format it in clear labeled sections.\n'
+          '• Preserve the original meaning and all details exactly.\n'
+          '• Do not add commentary, summaries, or explanations — output only the extracted content.';
 
       final imagePart = DataPart(mimeType, Uint8List.fromList(imageBytes));
       final content = Content.multi([TextPart(prompt), imagePart]);
