@@ -96,6 +96,18 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     });
   }
 
+  void _replaceContent(String newText) {
+    if (newText.isEmpty) return;
+    setState(() {
+      _contentController.text = newText;
+      _contentController.selection = TextSelection.collapsed(
+        offset: _contentController.text.length,
+      );
+    });
+  }
+
+  String _getContent() => _contentController.text;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -250,7 +262,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     children: [
                       _MicButton(
                         geminiService: _geminiService,
-                        onTranscription: _appendContent,
+                        onAppend: _appendContent,
+                        onReplace: _replaceContent,
+                        contentGetter: _getContent,
                       ),
                       const SizedBox(width: 8),
                       _ScanButton(
@@ -275,11 +289,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
 class _MicButton extends StatefulWidget {
   final GeminiService geminiService;
-  final ValueChanged<String> onTranscription;
+  final ValueChanged<String> onAppend;
+  final ValueChanged<String> onReplace;
+  final String Function() contentGetter;
 
   const _MicButton({
     required this.geminiService,
-    required this.onTranscription,
+    required this.onAppend,
+    required this.onReplace,
+    required this.contentGetter,
   });
 
   @override
@@ -347,12 +365,19 @@ class _MicButtonState extends State<_MicButton> {
         final bytes = await xFile.readAsBytes();
 
         try {
-          final transcription = await widget.geminiService.transcribeAudioLog(
+          final result = await widget.geminiService.processVoiceInput(
             bytes,
             mimeType: kIsWeb ? 'audio/webm' : 'audio/mp4',
+            existingContent: widget.contentGetter(),
           );
 
-          if (mounted) widget.onTranscription(transcription);
+          if (mounted) {
+            if (result.action == VoiceAction.replace) {
+              widget.onReplace(result.text);
+            } else {
+              widget.onAppend(result.text);
+            }
+          }
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(

@@ -4,12 +4,22 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 
 // ──────────────────────────────────────────────
 //  GeminiService
-//  Provides AI-powered transcription and image
-//  text extraction via the Gemini API.
+//  Smart AI note assistant — understands whether
+//  voice input is new content or a command.
 //
 //  API key is read at compile-time via:
 //    --dart-define=GEMINI_API_KEY=<your_key>
 // ──────────────────────────────────────────────
+
+/// The action the editor should take with the returned text.
+enum VoiceAction { append, replace }
+
+/// Holds the result of a smart voice processing call.
+class VoiceResult {
+  const VoiceResult({required this.action, required this.text});
+  final VoiceAction action;
+  final String text;
+}
 
 class GeminiService {
   static const _apiKey = String.fromEnvironment('GEMINI_API_KEY');
@@ -25,47 +35,98 @@ class GeminiService {
     return GenerativeModel(model: _model, apiKey: _apiKey);
   }
 
-  // ── Audio transcription ───────────────────────
+  // ── Smart voice processing ─────────────────────
 
-  /// Sends [audioBytes] to Gemini and returns a transcribed, cleaned-up note.
+  /// Processes voice audio intelligently by determining whether the user is
+  /// dictating new content or giving a command about existing content.
   ///
-  /// Supported MIME types: `audio/mp4`, `audio/webm`, `audio/mpeg`, etc.
+  /// Returns a [VoiceResult] with:
+  /// - [VoiceAction.append] + transcribed text if the user dictated new content
+  /// - [VoiceAction.replace] + transformed text if the user gave a command
+  ///
+  /// [existingContent] is the current text in the editor (can be empty).
   /// Throws [GeminiServiceException] on error or empty response.
-  Future<String> transcribeAudioLog(
+  Future<VoiceResult> processVoiceInput(
     List<int> audioBytes, {
     String mimeType = 'audio/mp4',
+    String existingContent = '',
   }) async {
     try {
-      const prompt =
-          'Listen carefully to this audio and extract EVERY task, reminder, or action item mentioned — '
-          'do not skip or merge any item. '
-          'Output a prioritized to-do list using this exact format for each item:\n'
-          '[ ] <emoji> <task title> — <deadline or timing if mentioned>\n\n'
-          'Priority rules:\n'
-          '• 🔴 High — has a hard deadline (today, tonight, specific date) or is urgent\n'
-          '• 🟡 Medium — should be done soon but no hard date\n'
-          '• 🟢 Low — nice-to-do, no urgency\n\n'
-          'Sort: High items first, then Medium, then Low. '
-          'If no deadline is mentioned for an item, still include it with the correct priority emoji. '
-          'Fix grammar but preserve all meaning. Output only the list — no intro sentence, no explanations.';
+      final hasExistingContent = existingContent.trim().isNotEmpty;
+
+      final prompt = StringBuffer()
+        ..writeln('You are a smart AI note-taking assistant inside a personal notes app.')
+        ..writeln()
+        ..writeln('The user just spoke into their microphone. Your job is to figure out WHAT they want:')
+        ..writeln()
+        ..writeln('CASE 1 — DICTATION (new content to write down):')
+        ..writeln('The user is dictating tasks, notes, ideas, reminders, or any content they want captured.')
+        ..writeln('→ Transcribe it cleanly. Fix grammar. Preserve every detail and deadline mentioned.')
+        ..writeln('→ Format action items as: [ ] <task> — <deadline/timing if mentioned>')
+        ..writeln('→ Start your response with exactly: ACTION:APPEND')
+        ..writeln('→ Then on the next line, output ONLY the clean transcribed content.')
+        ..writeln()
+        ..writeln('CASE 2 — COMMAND (instruction to transform existing content):')
+        ..writeln('The user is giving you an instruction about the note — e.g. "organize this",')
+        ..writeln('"make a to-do list", "prioritize these", "summarize", "rewrite this",')
+        ..writeln('"add priorities", "sort by deadline", etc.')
+        ..writeln('→ Apply their instruction to the existing note content below.')
+        ..writeln('→ Start your response with exactly: ACTION:REPLACE')
+        ..writeln('→ Then on the next line, output the FULL transformed note content.');
+
+      if (hasExistingContent) {
+        prompt
+          ..writeln()
+          ..writeln('═══ EXISTING NOTE CONTENT ═══')
+          ..writeln(existingContent)
+          ..writeln('═══ END OF NOTE ═══');
+      } else {
+        prompt
+          ..writeln()
+          ..writeln('(The note is currently empty — so this is almost certainly CASE 1, new content.)');
+      }
+
+      prompt
+        ..writeln()
+        ..writeln('RULES:')
+        ..writeln('• Your response MUST start with ACTION:APPEND or ACTION:REPLACE on its own line.')
+        ..writeln('• Do NOT include any intro sentences, explanations, or commentary.')
+        ..writeln('• Do NOT echo back the action line in the content itself.')
+        ..writeln('• If the note is empty and the user gives a command like "organize this", just say ACTION:APPEND and note that there is nothing to organize.');
 
       final audioPart = DataPart(mimeType, Uint8List.fromList(audioBytes));
-      final content = Content.multi([TextPart(prompt), audioPart]);
+      final content = Content.multi([TextPart(prompt.toString()), audioPart]);
 
       final response = await _gemini.generateContent([content]);
-      final text = response.text?.trim();
+      final raw = response.text?.trim();
 
-      if (text == null || text.isEmpty) {
+      if (raw == null || raw.isEmpty) {
         throw const GeminiServiceException(
-          'Gemini returned an empty transcription.',
+          'Gemini returned an empty response.',
         );
       }
 
-      return text;
+      // Parse the ACTION: header
+      final lines = raw.split('\n');
+      final firstLine = lines.first.trim().toUpperCase();
+
+      if (firstLine == 'ACTION:REPLACE' && hasExistingContent) {
+        final text = lines.skip(1).join('\n').trim();
+        return VoiceResult(
+          action: VoiceAction.replace,
+          text: text.isEmpty ? existingContent : text,
+        );
+      } else {
+        // Default to APPEND — safe fallback
+        final text = firstLine.startsWith('ACTION:')
+            ? lines.skip(1).join('\n').trim()
+            : raw; // If Gemini didn't follow format, use full response
+        return VoiceResult(action: VoiceAction.append, text: text);
+      }
     } on GeminiServiceException {
       rethrow;
     } catch (e) {
-      throw GeminiServiceException('Audio transcription failed: $e');
+      throw GeminiServiceException('Voice processing failed: $e');
     }
   }
 
