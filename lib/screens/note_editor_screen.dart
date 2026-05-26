@@ -269,7 +269,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                       const SizedBox(width: 8),
                       _ScanButton(
                         geminiService: _geminiService,
-                        onTextScanned: _appendContent,
+                        onAppend: _appendContent,
+                        onReplace: _replaceContent,
+                        contentGetter: _getContent,
                       ),
                     ],
                   ),
@@ -372,7 +374,7 @@ class _MicButtonState extends State<_MicButton> {
           );
 
           if (mounted) {
-            if (result.action == VoiceAction.replace) {
+            if (result.action == AiAction.replace) {
               widget.onReplace(result.text);
             } else {
               widget.onAppend(result.text);
@@ -462,11 +464,15 @@ class _MicButtonState extends State<_MicButton> {
 
 class _ScanButton extends StatefulWidget {
   final GeminiService geminiService;
-  final ValueChanged<String> onTextScanned;
+  final ValueChanged<String> onAppend;
+  final ValueChanged<String> onReplace;
+  final String Function() contentGetter;
 
   const _ScanButton({
     required this.geminiService,
-    required this.onTextScanned,
+    required this.onAppend,
+    required this.onReplace,
+    required this.contentGetter,
   });
 
   @override
@@ -477,12 +483,49 @@ class _ScanButtonState extends State<_ScanButton> {
   bool _isProcessing = false;
   final ImagePicker _picker = ImagePicker();
 
-  Future<void> _pickAndExtract() async {
+  void _showSourcePicker() {
+    if (_isProcessing) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Symbols.photo_camera, color: AppColors.accent),
+                title: Text('Take Photo', style: GoogleFonts.inter(color: AppColors.textPrimary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndProcess(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Symbols.photo_library, color: AppColors.accent),
+                title: Text('Choose from Gallery', style: GoogleFonts.inter(color: AppColors.textPrimary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndProcess(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndProcess(ImageSource source) async {
     if (_isProcessing) return;
 
     try {
       final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         imageQuality: 85,
       );
 
@@ -492,12 +535,19 @@ class _ScanButtonState extends State<_ScanButton> {
 
       final bytes = await image.readAsBytes();
       try {
-        final extractedText = await widget.geminiService.extractTextFromImage(
+        final result = await widget.geminiService.processImageInput(
           bytes,
           mimeType: 'image/jpeg',
+          existingContent: widget.contentGetter(),
         );
 
-        if (mounted) widget.onTextScanned(extractedText);
+        if (mounted) {
+          if (result.action == AiAction.replace) {
+            widget.onReplace(result.text);
+          } else {
+            widget.onAppend(result.text);
+          }
+        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(
@@ -516,7 +566,7 @@ class _ScanButtonState extends State<_ScanButton> {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: _isProcessing ? null : _pickAndExtract,
+      onTap: _isProcessing ? null : _showSourcePicker,
       borderRadius: BorderRadius.circular(24),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
