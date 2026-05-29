@@ -23,16 +23,14 @@ class AiResult {
 
 class GeminiService {
   static const _apiKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const _model = 'gemini-3.5-flash';
 
-  GenerativeModel get _gemini {
+  void _validateKey() {
     if (_apiKey.isEmpty) {
       throw const GeminiServiceException(
         'GEMINI_API_KEY is not set. '
         'Pass it via --dart-define=GEMINI_API_KEY=<key> when running the app.',
       );
     }
-    return GenerativeModel(model: _model, apiKey: _apiKey);
   }
 
   // ── Smart voice processing ─────────────────────
@@ -185,32 +183,49 @@ class GeminiService {
     }
   }
 
-  // ── Helper with Fallback ───────────────────────
+  // ── Helper with Cascading Fallback ──────────────
+  //  Tries models in order from newest to oldest.
+  //  Falls back to the next tier only on 503/429/demand errors.
+
+  static const _fallbackChain = [
+    'gemini-3.5-flash',            // primary
+    'gemini-2.5-flash-preview-05-20', // tier 2
+    'gemini-2.0-flash',            // tier 3
+    'gemini-1.5-flash',            // last resort
+  ];
+
+  static bool _isBusyError(Object e) {
+    final s = e.toString();
+    return s.contains('503') ||
+        s.contains('UNAVAILABLE') ||
+        s.contains('RESOURCE_EXHAUSTED') ||
+        s.contains('429') ||
+        s.contains('demand') ||
+        s.contains('not found for API version') ||
+        s.contains('not supported for generateContent');
+  }
 
   Future<GenerateContentResponse> _generateContentWithFallback(Content content) async {
-    try {
-      return await _gemini.generateContent([content]);
-    } catch (e) {
-      final errStr = e.toString();
-      if (errStr.contains('503') ||
-          errStr.contains('UNAVAILABLE') ||
-          errStr.contains('RESOURCE_EXHAUSTED') ||
-          errStr.contains('429') ||
-          errStr.contains('demand') ||
-          errStr.contains('limit')) {
-        try {
-          final fallbackModel = GenerativeModel(model: 'gemini-1.5-flash-latest', apiKey: _apiKey);
-          return await fallbackModel.generateContent([content]);
-        } catch (fallbackError) {
-          throw GeminiServiceException(
-            'Primary model ($_model) and fallback model failed.\n'
-            'Fallback error: $fallbackError\n'
-            'Original error: $e',
-          );
+    _validateKey();
+    Object? lastError;
+
+    for (final modelName in _fallbackChain) {
+      try {
+        final model = GenerativeModel(model: modelName, apiKey: _apiKey);
+        return await model.generateContent([content]);
+      } catch (e) {
+        if (_isBusyError(e)) {
+          lastError = e;
+          continue; // try next model in chain
         }
+        rethrow; // non-demand error — don't suppress
       }
-      rethrow;
     }
+
+    throw GeminiServiceException(
+      'All models in the fallback chain are unavailable.\n'
+      'Last error: $lastError',
+    );
   }
 
   // ── Shared response parser ─────────────────────
