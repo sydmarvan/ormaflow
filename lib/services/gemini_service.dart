@@ -199,7 +199,7 @@ class GeminiService {
           errStr.contains('demand') ||
           errStr.contains('limit')) {
         try {
-          final fallbackModel = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
+          final fallbackModel = GenerativeModel(model: 'gemini-1.5-flash-latest', apiKey: _apiKey);
           return await fallbackModel.generateContent([content]);
         } catch (fallbackError) {
           throw GeminiServiceException(
