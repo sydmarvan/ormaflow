@@ -98,7 +98,7 @@ class GeminiService {
       final content = Content.multi([TextPart(prompt.toString()), audioPart]);
 
       return _processAiResponse(
-        await _gemini.generateContent([content]),
+        await _generateContentWithFallback(content),
         hasExistingContent,
         existingContent,
         'Voice processing failed',
@@ -173,7 +173,7 @@ class GeminiService {
       final content = Content.multi([TextPart(prompt.toString()), imagePart]);
 
       return _processAiResponse(
-        await _gemini.generateContent([content]),
+        await _generateContentWithFallback(content),
         hasExistingContent,
         existingContent,
         'Image processing failed',
@@ -182,6 +182,34 @@ class GeminiService {
       rethrow;
     } catch (e) {
       throw GeminiServiceException('Image processing failed: $e');
+    }
+  }
+
+  // ── Helper with Fallback ───────────────────────
+
+  Future<GenerateContentResponse> _generateContentWithFallback(Content content) async {
+    try {
+      return await _gemini.generateContent([content]);
+    } catch (e) {
+      final errStr = e.toString();
+      if (errStr.contains('503') ||
+          errStr.contains('UNAVAILABLE') ||
+          errStr.contains('RESOURCE_EXHAUSTED') ||
+          errStr.contains('429') ||
+          errStr.contains('demand') ||
+          errStr.contains('limit')) {
+        try {
+          final fallbackModel = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
+          return await fallbackModel.generateContent([content]);
+        } catch (fallbackError) {
+          throw GeminiServiceException(
+            'Primary model ($_model) and fallback model failed.\n'
+            'Fallback error: $fallbackError\n'
+            'Original error: $e',
+          );
+        }
+      }
+      rethrow;
     }
   }
 
