@@ -12,12 +12,12 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 // ──────────────────────────────────────────────
 
 /// The action the editor should take with the returned text.
-enum VoiceAction { append, replace }
+enum AiAction { append, replace }
 
-/// Holds the result of a smart voice processing call.
-class VoiceResult {
-  const VoiceResult({required this.action, required this.text});
-  final VoiceAction action;
+/// Holds the result of a smart AI processing call.
+class AiResult {
+  const AiResult({required this.action, required this.text});
+  final AiAction action;
   final String text;
 }
 
@@ -40,13 +40,13 @@ class GeminiService {
   /// Processes voice audio intelligently by determining whether the user is
   /// dictating new content or giving a command about existing content.
   ///
-  /// Returns a [VoiceResult] with:
-  /// - [VoiceAction.append] + transcribed text if the user dictated new content
-  /// - [VoiceAction.replace] + transformed text if the user gave a command
+  /// Returns an [AiResult] with:
+  /// - [AiAction.append] + transcribed text if the user dictated new content
+  /// - [AiAction.replace] + transformed text if the user gave a command
   ///
   /// [existingContent] is the current text in the editor (can be empty).
   /// Throws [GeminiServiceException] on error or empty response.
-  Future<VoiceResult> processVoiceInput(
+  Future<AiResult> processVoiceInput(
     List<int> audioBytes, {
     String mimeType = 'audio/mp4',
     String existingContent = '',
@@ -97,32 +97,12 @@ class GeminiService {
       final audioPart = DataPart(mimeType, Uint8List.fromList(audioBytes));
       final content = Content.multi([TextPart(prompt.toString()), audioPart]);
 
-      final response = await _gemini.generateContent([content]);
-      final raw = response.text?.trim();
-
-      if (raw == null || raw.isEmpty) {
-        throw const GeminiServiceException(
-          'Gemini returned an empty response.',
-        );
-      }
-
-      // Parse the ACTION: header
-      final lines = raw.split('\n');
-      final firstLine = lines.first.trim().toUpperCase();
-
-      if (firstLine == 'ACTION:REPLACE' && hasExistingContent) {
-        final text = lines.skip(1).join('\n').trim();
-        return VoiceResult(
-          action: VoiceAction.replace,
-          text: text.isEmpty ? existingContent : text,
-        );
-      } else {
-        // Default to APPEND — safe fallback
-        final text = firstLine.startsWith('ACTION:')
-            ? lines.skip(1).join('\n').trim()
-            : raw; // If Gemini didn't follow format, use full response
-        return VoiceResult(action: VoiceAction.append, text: text);
-      }
+      return _processAiResponse(
+        await _gemini.generateContent([content]),
+        hasExistingContent,
+        existingContent,
+        'Voice processing failed',
+      );
     } on GeminiServiceException {
       rethrow;
     } catch (e) {
@@ -130,43 +110,111 @@ class GeminiService {
     }
   }
 
-  // ── Image OCR / extraction ────────────────────
+  // ── Smart image processing ─────────────────────
 
-  /// Sends [imageBytes] to Gemini and returns structured text extracted from the image.
+  /// Processes an image intelligently — extracts text/tasks from the image
+  /// and decides whether to append it as new content or merge/replace
+  /// it with existing note content.
   ///
-  /// Supported MIME types: `image/jpeg`, `image/png`, `image/webp`, etc.
+  /// Returns an [AiResult] with the appropriate action and text.
   /// Throws [GeminiServiceException] on error or empty response.
-  Future<String> extractTextFromImage(
+  Future<AiResult> processImageInput(
     List<int> imageBytes, {
     String mimeType = 'image/jpeg',
+    String existingContent = '',
   }) async {
     try {
-      const prompt =
-          'Extract ALL text, tasks, data, and information visible in this image — do not skip anything. '
-          'Structure the output as a clean personal note:\n\n'
-          '• If there are action items or tasks, list them as:\n'
-          '  [ ] <task> — <any date or context visible>\n'
-          '• If there is general text or data (names, numbers, addresses, etc.), format it in clear labeled sections.\n'
-          '• Preserve the original meaning and all details exactly.\n'
-          '• Do not add commentary, summaries, or explanations — output only the extracted content.';
+      final hasExistingContent = existingContent.trim().isNotEmpty;
 
-      final imagePart = DataPart(mimeType, Uint8List.fromList(imageBytes));
-      final content = Content.multi([TextPart(prompt), imagePart]);
+      final prompt = StringBuffer()
+        ..writeln('You are a smart AI note-taking assistant inside a personal notes app.')
+        ..writeln()
+        ..writeln('The user just scanned/photographed something. Your job:')
+        ..writeln()
+        ..writeln('1. Extract ALL text, tasks, data, numbers, names, and information visible in this image.')
+        ..writeln('   Do NOT skip anything. Be thorough.')
+        ..writeln()
+        ..writeln('2. Decide the best action based on the existing note:');
 
-      final response = await _gemini.generateContent([content]);
-      final text = response.text?.trim();
-
-      if (text == null || text.isEmpty) {
-        throw const GeminiServiceException(
-          'Gemini returned no text from the image.',
-        );
+      if (hasExistingContent) {
+        prompt
+          ..writeln()
+          ..writeln('═══ EXISTING NOTE CONTENT ═══')
+          ..writeln(existingContent)
+          ..writeln('═══ END OF NOTE ═══')
+          ..writeln()
+          ..writeln('CASE A — The image contains NEW, DIFFERENT content (e.g. a receipt, a new whiteboard, unrelated text):')
+          ..writeln('→ Start with ACTION:APPEND')
+          ..writeln('→ Output the extracted content cleanly formatted.')
+          ..writeln()
+          ..writeln('CASE B — The image content OVERLAPS or RELATES to the existing note (e.g. an updated version')
+          ..writeln('of the same list, a photo of handwritten notes that match, or content that should be merged):')
+          ..writeln('→ Start with ACTION:REPLACE')
+          ..writeln('→ Output the FULL merged/updated note — combining existing content with new image data.')
+          ..writeln('→ Do not duplicate items that already exist. Merge intelligently.');
+      } else {
+        prompt
+          ..writeln()
+          ..writeln('(The note is currently empty — just extract and format the image content.)')
+          ..writeln('→ Start with ACTION:APPEND')
+          ..writeln('→ Output the extracted content cleanly formatted.');
       }
 
-      return text;
+      prompt
+        ..writeln()
+        ..writeln('FORMATTING RULES:')
+        ..writeln('• Format action items as: [ ] <task> — <date or context if visible>')
+        ..writeln('• Format general text/data in clear labeled sections.')
+        ..writeln('• Your response MUST start with ACTION:APPEND or ACTION:REPLACE on its own line.')
+        ..writeln('• Do NOT include any intro sentences, explanations, or commentary.')
+        ..writeln('• Output ONLY the clean content after the action line.');
+
+      final imagePart = DataPart(mimeType, Uint8List.fromList(imageBytes));
+      final content = Content.multi([TextPart(prompt.toString()), imagePart]);
+
+      return _processAiResponse(
+        await _gemini.generateContent([content]),
+        hasExistingContent,
+        existingContent,
+        'Image processing failed',
+      );
     } on GeminiServiceException {
       rethrow;
     } catch (e) {
-      throw GeminiServiceException('Image text extraction failed: $e');
+      throw GeminiServiceException('Image processing failed: $e');
+    }
+  }
+
+  // ── Shared response parser ─────────────────────
+
+  AiResult _processAiResponse(
+    GenerateContentResponse response,
+    bool hasExistingContent,
+    String existingContent,
+    String errorContext,
+  ) {
+    final raw = response.text?.trim();
+
+    if (raw == null || raw.isEmpty) {
+      throw GeminiServiceException('$errorContext: Gemini returned an empty response.');
+    }
+
+    // Parse the ACTION: header
+    final lines = raw.split('\n');
+    final firstLine = lines.first.trim().toUpperCase();
+
+    if (firstLine == 'ACTION:REPLACE' && hasExistingContent) {
+      final text = lines.skip(1).join('\n').trim();
+      return AiResult(
+        action: AiAction.replace,
+        text: text.isEmpty ? existingContent : text,
+      );
+    } else {
+      // Default to APPEND — safe fallback
+      final text = firstLine.startsWith('ACTION:')
+          ? lines.skip(1).join('\n').trim()
+          : raw; // If Gemini didn't follow format, use full response
+      return AiResult(action: AiAction.append, text: text);
     }
   }
 }
