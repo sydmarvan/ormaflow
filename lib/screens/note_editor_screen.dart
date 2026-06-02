@@ -601,7 +601,8 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isActive ? Colors.white.withAlpha(25) : Colors.transparent,
+          color: isActive ? AppColors.accent.withAlpha(35) : Colors.transparent,
+          border: isActive ? Border.all(color: AppColors.accent.withAlpha(80), width: 1) : null,
         ),
         child: child,
       ),
@@ -610,8 +611,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   Widget _buildFormattingControlsBar() {
     final selectionStyle = _quillController.getSelectionStyle();
-    final isH1 = selectionStyle.containsKey(Attribute.h1.key);
-    final isH2 = selectionStyle.containsKey(Attribute.h2.key);
+    final headerAttr = selectionStyle.attributes[Attribute.h1.key];
+    final isH1 = headerAttr != null && headerAttr.value == 1;
+    final isH2 = headerAttr != null && headerAttr.value == 2;
     final isAa = !isH1 && !isH2;
     final isBold = selectionStyle.containsKey(Attribute.bold.key);
     final isItalic = selectionStyle.containsKey(Attribute.italic.key);
@@ -791,7 +793,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   Widget _buildAccessoryBar() {
     final selectionStyle = _quillController.getSelectionStyle();
-    final isChecklist = selectionStyle.containsKey(Attribute.unchecked.key);
+    final listAttr = selectionStyle.attributes[Attribute.unchecked.key];
+    final isChecklist = listAttr != null &&
+        (listAttr.value == 'checked' || listAttr.value == 'unchecked');
     final screenWidth = MediaQuery.of(context).size.width;
 
     // Adapt layout parameters to screen width
