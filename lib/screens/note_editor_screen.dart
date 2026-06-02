@@ -583,17 +583,21 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   // ── Formatting Controls Bar ──────────────────
 
+  // ── Formatting Controls Bar ──────────────────
+
   Widget _buildFormatButton({
     required Widget child,
     required bool isActive,
     required VoidCallback onTap,
+    double width = 36.0,
+    double height = 36.0,
   }) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 36,
-        height: 36,
+        width: width,
+        height: height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -616,10 +620,25 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     Color getTextColor(bool isActive) =>
         isActive ? AppColors.accent : AppColors.textPrimary;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Adapt layout parameters to screen width
+    final buttonWidth = screenWidth < 360 ? 30.0 : 36.0;
+    final buttonHeight = screenWidth < 360 ? 30.0 : 36.0;
+    final buttonSpacing = screenWidth < 360 ? 1.0 : 2.0;
+    final dividerMargin = screenWidth < 360 ? 4.0 : 6.0;
+    final barPaddingHorizontal = screenWidth < 360 ? 6.0 : 10.0;
+    final barPaddingVertical = screenWidth < 360 ? 3.0 : 4.0;
+    final fontSize = screenWidth < 360 ? 12.0 : 14.0;
+    final iconSize = screenWidth < 360 ? 16.0 : 18.0;
+
     return Center(
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: EdgeInsets.symmetric(
+          horizontal: barPaddingHorizontal,
+          vertical: barPaddingVertical,
+        ),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(28),
@@ -629,11 +648,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildFormatButton(
+              width: buttonWidth,
+              height: buttonHeight,
               child: Text(
                 'H1',
                 style: GoogleFonts.inter(
                   color: getTextColor(isH1),
-                  fontSize: 14,
+                  fontSize: fontSize,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -643,13 +664,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     isH1 ? Attribute.clone(Attribute.h1, null) : Attribute.h1);
               },
             ),
-            const SizedBox(width: 2),
+            SizedBox(width: buttonSpacing),
             _buildFormatButton(
+              width: buttonWidth,
+              height: buttonHeight,
               child: Text(
                 'H2',
                 style: GoogleFonts.inter(
                   color: getTextColor(isH2),
-                  fontSize: 14,
+                  fontSize: fontSize,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -659,13 +682,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     isH2 ? Attribute.clone(Attribute.h2, null) : Attribute.h2);
               },
             ),
-            const SizedBox(width: 2),
+            SizedBox(width: buttonSpacing),
             _buildFormatButton(
+              width: buttonWidth,
+              height: buttonHeight,
               child: Text(
                 'Aa',
                 style: GoogleFonts.inter(
                   color: getTextColor(isAa),
-                  fontSize: 14,
+                  fontSize: fontSize,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -675,19 +700,21 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                 _quillController.formatSelection(Attribute.clone(Attribute.h2, null));
               },
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: dividerMargin),
             Container(
               width: 1,
               height: 18,
               color: AppColors.divider,
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: dividerMargin),
             _buildFormatButton(
+              width: buttonWidth,
+              height: buttonHeight,
               child: Text(
                 'B',
                 style: GoogleFonts.inter(
                   color: getTextColor(isBold),
-                  fontSize: 15,
+                  fontSize: fontSize + 1,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -697,14 +724,16 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     isBold ? Attribute.clone(Attribute.bold, null) : Attribute.bold);
               },
             ),
-            const SizedBox(width: 2),
+            SizedBox(width: buttonSpacing),
             _buildFormatButton(
+              width: buttonWidth,
+              height: buttonHeight,
               child: Text(
                 'I',
                 style: TextStyle(
                   fontFamily: 'serif',
                   color: getTextColor(isItalic),
-                  fontSize: 15,
+                  fontSize: fontSize + 1,
                   fontStyle: FontStyle.italic,
                   fontWeight: FontWeight.w700,
                 ),
@@ -715,13 +744,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     isItalic ? Attribute.clone(Attribute.italic, null) : Attribute.italic);
               },
             ),
-            const SizedBox(width: 2),
+            SizedBox(width: buttonSpacing),
             _buildFormatButton(
+              width: buttonWidth,
+              height: buttonHeight,
               child: Text(
                 'U',
                 style: GoogleFonts.inter(
                   color: getTextColor(isUnderline),
-                  fontSize: 14,
+                  fontSize: fontSize,
                   decoration: TextDecoration.underline,
                   fontWeight: FontWeight.w700,
                 ),
@@ -732,12 +763,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     isUnderline ? Attribute.clone(Attribute.underline, null) : Attribute.underline);
               },
             ),
-            const SizedBox(width: 2),
+            SizedBox(width: buttonSpacing),
             _buildFormatButton(
-              child: const Icon(
+              width: buttonWidth,
+              height: buttonHeight,
+              child: Icon(
                 Symbols.format_clear,
                 color: AppColors.textPrimary,
-                size: 18,
+                size: iconSize,
               ),
               isActive: false,
               onTap: () {
@@ -759,15 +792,35 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   Widget _buildAccessoryBar() {
     final selectionStyle = _quillController.getSelectionStyle();
     final isChecklist = selectionStyle.containsKey(Attribute.unchecked.key);
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Adapt layout parameters to screen width
+    final outerPaddingLeft = screenWidth < 360 ? 12.0 : 20.0;
+    final outerPaddingRight = screenWidth < 360 ? 12.0 : 20.0;
+    final outerPaddingBottom = screenWidth < 360 ? 12.0 : 20.0;
+
+    final pillPaddingHorizontal = screenWidth < 360 ? 10.0 : 16.0;
+    final pillPaddingVertical = screenWidth < 360 ? 6.0 : 8.0;
+
+    final innerIconSpacing = screenWidth < 360 ? 12.0 : 20.0;
+    final rightButtonsSpacing = screenWidth < 360 ? 8.0 : 12.0;
 
     return Padding(
-      padding: const EdgeInsets.only(left: 20.0, right: 20.0, bottom: 20.0, top: 4.0),
+      padding: EdgeInsets.only(
+        left: outerPaddingLeft,
+        right: outerPaddingRight,
+        bottom: outerPaddingBottom,
+        top: 4.0,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Left Pill Container
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: EdgeInsets.symmetric(
+              horizontal: pillPaddingHorizontal,
+              vertical: pillPaddingVertical,
+            ),
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(30),
@@ -782,7 +835,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                   constraints: const BoxConstraints(),
                   splashRadius: 20,
                 ),
-                const SizedBox(width: 20),
+                SizedBox(width: innerIconSpacing),
                 IconButton(
                   icon: Icon(
                     isChecklist ? Symbols.check_box : Symbols.check_box_outline_blank,
@@ -798,7 +851,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                   constraints: const BoxConstraints(),
                   splashRadius: 20,
                 ),
-                const SizedBox(width: 20),
+                SizedBox(width: innerIconSpacing),
                 IconButton(
                   icon: Text(
                     'TT',
@@ -828,7 +881,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                 onAiResult: _handleAiResultWithLoader,
                 contentGetter: _getPlainText,
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: rightButtonsSpacing),
               _MicButton(
                 geminiService: _geminiService,
                 onAiResult: _handleAiResultWithLoader,
@@ -960,6 +1013,10 @@ class _MicButtonState extends State<_MicButton> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final paddingVal = screenWidth < 360 ? 10.0 : 12.0;
+    final iconSize = screenWidth < 360 ? 20.0 : 24.0;
+
     return GestureDetector(
       onTap: () {
         if (_isRecording) {
@@ -986,7 +1043,7 @@ class _MicButtonState extends State<_MicButton> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(paddingVal),
         decoration: BoxDecoration(
           color: AppColors.accent,
           shape: BoxShape.circle,
@@ -1001,15 +1058,15 @@ class _MicButtonState extends State<_MicButton> {
               : null,
         ),
         child: _isTranscribing
-            ? const SizedBox(
-                width: 24,
-                height: 24,
+            ? SizedBox(
+                width: iconSize,
+                height: iconSize,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: AppColors.background,
                 ),
               )
-            : const Icon(Symbols.mic, color: AppColors.background, size: 24),
+            : Icon(Symbols.mic, color: AppColors.background, size: iconSize),
       ),
     );
   }
@@ -1116,12 +1173,16 @@ class _ScanButtonState extends State<_ScanButton> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final paddingVal = screenWidth < 360 ? 10.0 : 12.0;
+    final iconSize = screenWidth < 360 ? 20.0 : 24.0;
+
     return InkWell(
       onTap: _isProcessing ? null : _showSourcePicker,
       borderRadius: BorderRadius.circular(24),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(paddingVal),
         decoration: BoxDecoration(
           color: _isProcessing
               ? AppColors.accent.withAlpha(150)
@@ -1129,18 +1190,18 @@ class _ScanButtonState extends State<_ScanButton> {
           shape: BoxShape.circle,
         ),
         child: _isProcessing
-            ? const SizedBox(
-                width: 24,
-                height: 24,
+            ? SizedBox(
+                width: iconSize,
+                height: iconSize,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: AppColors.background,
                 ),
               )
-            : const Icon(
+            : Icon(
                 Symbols.add_a_photo,
                 color: AppColors.background,
-                size: 24,
+                size: iconSize,
               ),
       ),
     );
