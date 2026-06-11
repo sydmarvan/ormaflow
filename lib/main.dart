@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -8,6 +9,7 @@ import 'providers/task_provider.dart';
 import 'screens/api_key_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/api_key_service.dart';
+import 'services/gemini_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'theme/theme.dart';
@@ -51,6 +53,13 @@ void main() async {
   // ── API key check (for routing) ───────────────
   final apiKey = await ApiKeyService.getKey();
   final hasApiKey = apiKey != null && apiKey.isNotEmpty;
+
+  // ── Debug: list available Gemini models once ──
+  // This prints which model names are valid for the stored API key.
+  // Flip GeminiService.kDebugListModels to false when no longer needed.
+  if (GeminiService.kDebugListModels) {
+    unawaited(GeminiService().listModels());
+  }
 
   // ── Build provider with Hive boxes ───────────
   final taskProvider = TaskProvider()..init(tasksBox, trashBox);

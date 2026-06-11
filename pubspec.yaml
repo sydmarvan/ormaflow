@@ -47,7 +47,8 @@ dependencies:
   # Material Symbols icon font (rounded style)
   material_symbols_icons: ^4.2928.1
 
-  google_generative_ai: ^0.4.6
+  google_generative_ai: ^0.4.7
+  http: ^1.1.0
   record: ^6.2.0
   image_picker: ^1.2.2
   path_provider: ^2.1.5

@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:http/http.dart' as http;
 import 'api_key_service.dart';
 
 // ──────────────────────────────────────────────
@@ -22,13 +23,14 @@ class AiResult {
 class GeminiService {
   static const _apiKey = String.fromEnvironment('GEMINI_API_KEY');
 
-  /// Tests the validity of an API key.
+  /// Tests the validity of an API key by calling the primary model.
   Future<void> testApiKey(String apiKey) async {
     if (apiKey.trim().isEmpty) {
       throw const GeminiServiceException('API Key cannot be empty.');
     }
     try {
-      final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: apiKey);
+      // Use the same primary model as the fallback chain to confirm compatibility.
+      final model = GenerativeModel(model: _fallbackChain.first, apiKey: apiKey);
       final response = await model.generateContent([
         Content.text('Test connection. Reply with "OK".')
       ]);
@@ -37,6 +39,79 @@ class GeminiService {
       }
     } catch (e) {
       throw GeminiServiceException(e.toString());
+    }
+  }
+
+  // ── Debug: list all available models for the stored API key ───────────────
+  //
+  // Call this once to discover which model names are valid for a given key.
+  // Output is printed to the debug console.
+  // Set kDebugListModels = true in main.dart to activate on startup.
+
+  static const bool kDebugListModels = true; // ← flip to false when done
+
+  /// Hits the v1beta ListModels REST endpoint and logs every model that
+  /// supports generateContent. Prints a ready-to-paste fallback chain.
+  Future<void> listModels() async {
+    final customKey = await ApiKeyService.getKey();
+    final activeKey = customKey ?? _apiKey;
+    if (activeKey.isEmpty) {
+      debugPrint('[GeminiService] No API key — cannot list models.');
+      return;
+    }
+
+    try {
+      final uri = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=$activeKey&pageSize=50',
+      );
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        debugPrint('[GeminiService] ListModels HTTP ${response.statusCode}: ${response.body}');
+        return;
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final models = (data['models'] as List<dynamic>? ?? []);
+
+      debugPrint('\n====== AVAILABLE GEMINI MODELS (${models.length}) ======');
+      final generateContentModels = <String>[];
+      final multimodalModels = <String>[];
+
+      for (final m in models) {
+        final name = (m['name'] as String).replaceFirst('models/', '');
+        final methods = (m['supportedGenerationMethods'] as List<dynamic>? ?? [])
+            .map((e) => e.toString())
+            .toList();
+        final supportsGenerate = methods.contains('generateContent');
+        final displayName = m['displayName'] ?? name;
+
+        if (supportsGenerate) {
+          generateContentModels.add(name);
+          // Heuristic: models that support audio/vision mention it in description
+          final description = (m['description'] ?? '').toString().toLowerCase();
+          if (description.contains('audio') || description.contains('vision') ||
+              description.contains('multimodal') || name.contains('flash') ||
+              name.contains('pro')) {
+            multimodalModels.add(name);
+          }
+        }
+
+        debugPrint(
+          '  ${supportsGenerate ? "✓" : "✗"} $name  |  "$displayName"  |  methods: $methods',
+        );
+      }
+
+      debugPrint('\n-- Models supporting generateContent --');
+      for (final m in generateContentModels) {
+        debugPrint('  "$m",');
+      }
+      debugPrint('\n-- Likely multimodal (audio/vision) models --');
+      for (final m in multimodalModels) {
+        debugPrint('  "$m",');
+      }
+      debugPrint('=====================================\n');
+    } catch (e) {
+      debugPrint('[GeminiService] listModels error: $e');
     }
   }
 
@@ -259,10 +334,14 @@ Output ONLY the JSON object:''';
   //  Tries models in order from newest to oldest.
   //  Falls back only on 503/429/demand errors.
 
+  // ── Fallback model chain ──────────────────────────────────────────────────
+  //  Listed from most preferred to least preferred.
+  //  Run listModels() to get the exact names available for your API key.
+  //  The v1beta API identifies models WITHOUT the "models/" prefix.
   static const _fallbackChain = [
-    'gemini-2.5-flash-preview-05-20', // primary
-    'gemini-2.0-flash',               // tier 2
-    'gemini-1.5-flash',               // last resort
+    'gemini-2.0-flash',               // primary  — stable, multimodal
+    'gemini-2.0-flash-lite',          // tier 2   — faster, still multimodal
+    'gemini-1.5-flash-latest',        // last resort — widely available
   ];
 
   static bool _isBusyError(Object e) {
