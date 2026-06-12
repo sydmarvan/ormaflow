@@ -336,25 +336,30 @@ Output ONLY the JSON object:''';
 
   // ── Fallback model chain ──────────────────────────────────────────────────
   //  Listed from most preferred to least preferred.
-  //  Run listModels() to get the exact names available for your API key.
-  //  The v1beta API identifies models WITHOUT the "models/" prefix.
+  //  Source: https://ai.google.dev/gemini-api/docs/models (checked 2026-06-12)
+  //
+  //  ❌ gemini-2.0-flash      → SHUT DOWN
+  //  ❌ gemini-2.0-flash-lite → SHUT DOWN
+  //  ❌ gemini-1.5-flash      → DEPRECATED (no -latest suffix)
   static const _fallbackChain = [
-    'gemini-2.0-flash',               // primary  — stable, multimodal
-    'gemini-2.0-flash-lite',          // tier 2   — faster, still multimodal
-    'gemini-1.5-flash-latest',        // last resort — widely available
+    'gemini-2.5-flash',        // primary  — stable GA, multimodal
+    'gemini-2.5-flash-lite',   // tier 2   — fastest stable 2.5 model
+    'gemini-1.5-flash-latest', // last resort — -latest alias always resolves
   ];
 
   static bool _isBusyError(Object e) {
     final s = e.toString();
+    // Only retry on TRANSIENT errors (capacity, quota, rate-limit).
+    // Do NOT retry on permanent errors like wrong model name — those
+    // will never succeed on any retry and should surface immediately.
     return s.contains('503') ||
         s.contains('UNAVAILABLE') ||
         s.contains('RESOURCE_EXHAUSTED') ||
         s.contains('429') ||
+        s.contains('overloaded') ||
         s.contains('demand') ||
         s.contains('limit') ||
-        s.contains('quota') ||
-        s.contains('not found for API version') ||
-        s.contains('not supported for generateContent');
+        s.contains('quota');
   }
 
   Future<GenerateContentResponse> _generateContentWithFallback(Content content) async {
