@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../theme/theme.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/fade_slide_in.dart';
 
 // ──────────────────────────────────────────────
 //  TrashScreen  – scrollable content area for trash
@@ -19,13 +21,11 @@ class TrashScreen extends StatelessWidget {
     final trashTasks = context.watch<TaskProvider>().trashTasks;
 
     if (trashTasks.isEmpty) {
-      return Center(
-        child: Text(
-          'No items in Trash',
-          style: GoogleFonts.inter(
-            color: AppColors.textSecondary,
-            fontSize: 16,
-          ),
+      return const Center(
+        child: EmptyState(
+          icon: Symbols.delete_outline,
+          title: 'Trash is empty',
+          message: 'Deleted notes and tasks will show up here.',
         ),
       );
     }
@@ -50,7 +50,10 @@ class TrashScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     for (int i = 0; i < trashTasks.length; i++) ...[
-                      _TrashRow(task: trashTasks[i]),
+                      FadeSlideIn(
+                        key: ValueKey(trashTasks[i].id),
+                        child: _TrashRow(task: trashTasks[i]),
+                      ),
                       if (i < trashTasks.length - 1)
                         const Divider(
                           height: 1,

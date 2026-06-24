@@ -6,9 +6,36 @@ import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../theme/theme.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/fade_slide_in.dart';
 import 'api_key_screen.dart';
 import 'note_editor_screen.dart';
 import 'trash_screen.dart';
+
+// ──────────────────────────────────────────────
+//  Smooth fade + slide-up transition into NoteEditorScreen
+// ──────────────────────────────────────────────
+
+Route<T> _noteEditorRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    transitionDuration: const Duration(milliseconds: 320),
+    reverseTransitionDuration: const Duration(milliseconds: 260),
+    pageBuilder: (context, animation, secondaryAnimation) => page,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.04),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
 
 // ──────────────────────────────────────────────
 //  HomeScreen
@@ -94,12 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFAB(BuildContext context) {
     return FloatingActionButton(
       onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const NoteEditorScreen(),
-          ),
-        );
+        Navigator.push(context, _noteEditorRoute(const NoteEditorScreen()));
       },
       backgroundColor: AppColors.accent,
       foregroundColor: Colors.white,
@@ -297,6 +319,21 @@ class _TaskListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tasks = context.watch<TaskProvider>().tasks;
 
+    if (tasks.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.divider, width: 1),
+        ),
+        child: const EmptyState(
+          icon: Symbols.checklist,
+          title: 'No notes yet',
+          message: 'Tap the + button to capture your first note or task.',
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -313,7 +350,7 @@ class _TaskListCard extends StatelessWidget {
           child: Column(
             children: [
               for (int i = 0; i < tasks.length; i++) ...[
-                _TaskRow(task: tasks[i]),
+                FadeSlideIn(key: ValueKey(tasks[i].id), child: _TaskRow(task: tasks[i])),
                 if (i < tasks.length - 1)
                   const Divider(
                     height: 1,
@@ -349,12 +386,7 @@ class _TaskRow extends StatelessWidget {
   final Task task;
 
   void _showNoteDetails(BuildContext context, Task task) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NoteEditorScreen(task: task),
-      ),
-    );
+    Navigator.push(context, _noteEditorRoute(NoteEditorScreen(task: task)));
   }
 
   @override
